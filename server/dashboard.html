@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Donaciones — Frate</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: #0f0f12;
+      color: #f3ead3;
+      min-height: 100vh;
+      padding: 32px;
+    }
+    h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+    .subtitle { color: #948d9e; font-size: 14px; margin-bottom: 32px; }
+    .filters {
+      display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px;
+      align-items: flex-end;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 4px; }
+    .filter-group label { font-size: 11px; color: #948d9e; text-transform: uppercase; letter-spacing: 0.08em; }
+    .filter-group input, .filter-group select {
+      background: #18181b; border: 1px solid rgba(201,162,39,0.25);
+      color: #f3ead3; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+      outline: none; min-width: 160px;
+    }
+    .filter-group input:focus, .filter-group select:focus { border-color: #c9a227; }
+    button {
+      background: #c9a227; color: #0f0f12; border: none; padding: 8px 18px;
+      border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #e0bc4a; }
+    button.secondary {
+      background: transparent; border: 1px solid rgba(201,162,39,0.3);
+      color: #f3ead3;
+    }
+    button.secondary:hover { background: rgba(201,162,39,0.1); }
+    .summary {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px; margin-bottom: 32px;
+    }
+    .summary-card {
+      background: #18181b; border: 1px solid rgba(201,162,39,0.15);
+      border-radius: 12px; padding: 20px;
+    }
+    .summary-card .label { font-size: 11px; color: #948d9e; text-transform: uppercase; letter-spacing: 0.08em; }
+    .summary-card .value { font-size: 28px; font-weight: 700; color: #e0bc4a; margin-top: 4px; }
+    .summary-card .sub { font-size: 12px; color: #948d9e; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      text-align: left; font-size: 11px; color: #948d9e; text-transform: uppercase;
+      letter-spacing: 0.08em; padding: 12px 16px; border-bottom: 1px solid rgba(201,162,39,0.15);
+    }
+    tbody td {
+      padding: 12px 16px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    tbody tr:hover { background: rgba(201,162,39,0.04); }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 99px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-proyecto { background: rgba(201,162,39,0.15); color: #e0bc4a; }
+    .badge-anonimo { background: rgba(148,141,158,0.15); color: #948d9e; }
+    .badge-completado { background: rgba(76,175,80,0.15); color: #4caf50; }
+    .badge-pendiente { background: rgba(255,193,7,0.15); color: #ffc107; }
+    .badge-fallido { background: rgba(244,67,54,0.15); color: #f44336; }
+    .empty { text-align: center; padding: 48px; color: #948d9e; }
+    .actions { display: flex; gap: 8px; margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+  <h1>Panel de Donaciones</h1>
+  <p class="subtitle">Frate — Plataforma de Proyectos Sociales 2026</p>
+
+  <div class="filters">
+    <div class="filter-group">
+      <label>Proyecto</label>
+      <select id="filterProyecto"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Desde</label>
+      <input type="date" id="filterDesde" />
+    </div>
+    <div class="filter-group">
+      <label>Hasta</label>
+      <input type="date" id="filterHasta" />
+    </div>
+    <button onclick="cargar()">Filtrar</button>
+  </div>
+
+  <div class="summary" id="summary"></div>
+
+  <div class="actions">
+    <button class="secondary" onclick="exportarCSV()">Exportar CSV</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Proyecto</th>
+        <th>Nombre</th>
+        <th>Monto</th>
+        <th>Comisión</th>
+        <th>Neto</th>
+        <th>Estado</th>
+        <th>Fecha</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <div class="empty" id="empty" style="display:none;">No hay donaciones registradas.</div>
+
+  <script>
+    const TOKEN = window.location.pathname.split('/').pop()
+
+    async function api(path) {
+      const sep = path.includes('?') ? '&' : '?'
+      const res = await fetch(`/api${path}${sep}token=${TOKEN}`)
+      if (!res.ok) throw new Error('No autorizado')
+      return res.json()
+    }
+
+    async function cargar() {
+      const proyecto = document.getElementById('filterProyecto').value
+      const desde = document.getElementById('filterDesde').value
+      const hasta = document.getElementById('filterHasta').value
+
+      const params = new URLSearchParams()
+      if (proyecto) params.set('proyecto', proyecto)
+      if (desde) params.set('desde', desde)
+      if (hasta) params.set('hasta', hasta)
+
+      try {
+        const data = await api(`/donaciones?${params}`)
+        renderResumen(data.resumen)
+        renderTabla(data.donaciones)
+      } catch {
+        document.getElementById('empty').style.display = 'block'
+        document.getElementById('empty').textContent = 'Error de conexión o token inválido.'
+      }
+    }
+
+    function renderResumen(resumen) {
+      const el = document.getElementById('summary')
+      if (!resumen || resumen.length === 0) {
+        el.innerHTML = ''
+        return
+      }
+
+      el.innerHTML = resumen.map(r => `
+        <div class="summary-card">
+          <div class="label">${r.proyecto}</div>
+          <div class="value">S/ ${(r.total_monto || 0).toFixed(2)}</div>
+          <div class="sub">${r.total_donaciones} donaciones · Neto: S/ ${(r.total_neto || 0).toFixed(2)}</div>
+          <div class="sub">Comisiones: S/ ${(r.total_comision || 0).toFixed(2)} · Fees: S/ ${(r.total_fee || 0).toFixed(2)}</div>
+        </div>
+      `).join('')
+    }
+
+    function renderTabla(donaciones) {
+      const tbody = document.getElementById('tbody')
+      const empty = document.getElementById('empty')
+
+      if (!donaciones || donaciones.length === 0) {
+        tbody.innerHTML = ''
+        empty.style.display = 'block'
+        return
+      }
+
+      empty.style.display = 'none'
+      tbody.innerHTML = donaciones.map(d => `
+        <tr>
+          <td>${d.id}</td>
+          <td><span class="badge badge-proyecto">${d.proyecto}</span></td>
+          <td>${d.anonimo ? '<span class="badge badge-anonimo">Anónimo</span>' : d.nombre}</td>
+          <td>S/ ${d.monto.toFixed(2)}</td>
+          <td>S/ ${d.comision.toFixed(2)}</td>
+          <td>S/ ${d.monto_neto.toFixed(2)}</td>
+          <td><span class="badge badge-${d.estado_pago}">${d.estado_pago}</span></td>
+          <td>${new Date(d.creado_en + 'Z').toLocaleDateString('es-PE')}</td>
+        </tr>
+      `).join('')
+    }
+
+    async function cargarProyectos() {
+      try {
+        const data = await api('/proyectos')
+        const select = document.getElementById('filterProyecto')
+        data.proyectos.forEach(p => {
+          const opt = document.createElement('option')
+          opt.value = p
+          opt.textContent = p
+          select.appendChild(opt)
+        })
+      } catch { /* silenciar */ }
+    }
+
+    function exportarCSV() {
+      const proyecto = document.getElementById('filterProyecto').value
+      const desde = document.getElementById('filterDesde').value
+      const hasta = document.getElementById('filterHasta').value
+      const params = new URLSearchParams()
+      if (proyecto) params.set('proyecto', proyecto)
+      if (desde) params.set('desde', desde)
+      if (hasta) params.set('hasta', hasta)
+      params.set('token', TOKEN)
+      window.location.href = `/api/donaciones/csv?${params}`
+    }
+
+    cargarProyectos()
+    cargar()
+  </script>
+</body>
+</html>
