@@ -20,19 +20,19 @@ export default function Crowdfunding() {
               title: 'Vista al ingresar',
               status: 'Bienvenida',
               desc: 'Coaching corporativo con freestyle en 11 instituciones de educación superior.',
-              foto: 'Public/cap/cap1.svg',
+              foto: '/cap/cap1.svg',
             },
             {
               title: 'Vista de crowdfunding',
               status: 'vista del Crowdfunding',
               desc: 'Producción musical colaborativa con líderes vecinales de Huánuco.',
-              foto: 'Public/cap/cap2.svg',
+              foto: '/cap/cap2.svg',
             },
             {
               title: 'Vista de crowdfunding',
               status: 'vista',
               desc: 'Programa de formación para catequistas de la Diócesis de Huánuco.',
-              foto: 'Public/cap/cap3.svg',
+              foto: '/cap/cap3.svg',
             },
           ].map((campana, i) => (
             <Reveal key={campana.title} delay={i * 0.06}>

@@ -15,7 +15,7 @@ export default function Header({ onContacto }) {
       <div className="wrap flex items-center justify-between gap-6 py-3.5">
         <a href="#top" className="flex items-center shrink-0">
           <img
-            src="Public/FRATE4.svg"
+            src="/FRATE4.svg"
             alt="FRATE"
             className="h-9 w-auto object-contain"
           />
