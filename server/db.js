@@ -32,6 +32,52 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_donaciones_proyecto ON donaciones(proyecto);
   CREATE INDEX IF NOT EXISTS idx_donaciones_fecha ON donaciones(creado_en);
   CREATE INDEX IF NOT EXISTS idx_donaciones_estado ON donaciones(estado_pago);
+
+  CREATE TABLE IF NOT EXISTS configuracion (
+    clave TEXT PRIMARY KEY,
+    valor TEXT NOT NULL,
+    actualizado_en TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `)
+
+// ── Valores por defecto (solo se insertan si no existen) ──
+const defaults = {
+  comision_pct: '5',      // % de comisión sobre el monto donado
+  fee_fijo: '0.74',       // fee fijo en soles por transacción (referencia Culqi)
+  monto_minimo: '15',     // monto mínimo permitido para donar (soles)
+}
+
+const insertDefault = db.prepare(
+  `INSERT OR IGNORE INTO configuracion (clave, valor) VALUES (?, ?)`
+)
+for (const [clave, valor] of Object.entries(defaults)) {
+  insertDefault.run(clave, valor)
+}
+
+// ── Helpers de configuración ────────────────────────────────
+export function getAllConfig() {
+  const rows = db.prepare('SELECT clave, valor FROM configuracion').all()
+  const config = {}
+  for (const row of rows) config[row.clave] = row.valor
+  return config
+}
+
+export function getConfigValue(clave, fallback = null) {
+  const row = db.prepare('SELECT valor FROM configuracion WHERE clave = ?').get(clave)
+  return row ? row.valor : fallback
+}
+
+export function setConfigValues(cambios) {
+  const stmt = db.prepare(`
+    INSERT INTO configuracion (clave, valor, actualizado_en)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor, actualizado_en = datetime('now')
+  `)
+  const tx = db.transaction((entries) => {
+    for (const [clave, valor] of entries) stmt.run(clave, String(valor))
+  })
+  tx(Object.entries(cambios))
+  return getAllConfig()
+}
 
 export default db

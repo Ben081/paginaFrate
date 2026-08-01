@@ -14,7 +14,24 @@
       padding: 32px;
     }
     h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
-    .subtitle { color: #948d9e; font-size: 14px; margin-bottom: 32px; }
+    .subtitle { color: #948d9e; font-size: 14px; margin-bottom: 24px; }
+
+    /* Tabs */
+    .tabs {
+      display: flex; gap: 4px; margin-bottom: 28px;
+      border-bottom: 1px solid rgba(201,162,39,0.15);
+    }
+    .tab-btn {
+      background: transparent; border: none; color: #948d9e;
+      padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .tab-btn:hover { color: #f3ead3; }
+    .tab-btn.active { color: #e0bc4a; border-bottom-color: #c9a227; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
     .filters {
       display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px;
       align-items: flex-end;
@@ -69,69 +86,161 @@
     .badge-fallido { background: rgba(244,67,54,0.15); color: #f44336; }
     .empty { text-align: center; padding: 48px; color: #948d9e; }
     .actions { display: flex; gap: 8px; margin-bottom: 24px; }
+
+    /* Configuración */
+    .config-card {
+      background: #18181b; border: 1px solid rgba(201,162,39,0.15);
+      border-radius: 12px; padding: 28px; max-width: 480px;
+    }
+    .config-field { margin-bottom: 20px; }
+    .config-field label {
+      display: block; font-size: 12px; color: #948d9e;
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
+    }
+    .config-field .hint { font-size: 12px; color: #6b6470; margin-top: 4px; }
+    .config-field .input-wrap { position: relative; }
+    .config-field input {
+      width: 100%; background: #0f0f12; border: 1px solid rgba(201,162,39,0.25);
+      color: #f3ead3; padding: 10px 14px; border-radius: 8px; font-size: 15px;
+      outline: none;
+    }
+    .config-field input:focus { border-color: #c9a227; }
+    .config-status {
+      margin-top: 16px; font-size: 13px; min-height: 18px;
+    }
+    .config-status.ok { color: #4caf50; }
+    .config-status.error { color: #f44336; }
+    .config-preview {
+      margin-top: 24px; padding-top: 20px; border-top: 1px solid rgba(201,162,39,0.1);
+      font-size: 13px; color: #948d9e; line-height: 1.7;
+    }
+    .config-preview strong { color: #e0bc4a; }
   </style>
 </head>
 <body>
-  <h1>Panel de Donaciones</h1>
+  <h1>Panel Administrativo</h1>
   <p class="subtitle">Frate — Plataforma de Proyectos Sociales 2026</p>
 
-  <div class="filters">
-    <div class="filter-group">
-      <label>Proyecto</label>
-      <select id="filterProyecto"><option value="">Todos</option></select>
-    </div>
-    <div class="filter-group">
-      <label>Desde</label>
-      <input type="date" id="filterDesde" />
-    </div>
-    <div class="filter-group">
-      <label>Hasta</label>
-      <input type="date" id="filterHasta" />
-    </div>
-    <button onclick="cargar()">Filtrar</button>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="movimientos" onclick="cambiarTab('movimientos')">Movimientos</button>
+    <button class="tab-btn" data-tab="configuracion" onclick="cambiarTab('configuracion')">Configuración</button>
   </div>
 
-  <div class="summary" id="summary"></div>
+  <!-- ── TAB: MOVIMIENTOS ────────────────────────────────── -->
+  <div class="tab-panel active" id="panel-movimientos">
+    <div class="filters">
+      <div class="filter-group">
+        <label>Proyecto</label>
+        <select id="filterProyecto"><option value="">Todos</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Buscar (nombre o correo)</label>
+        <input type="text" id="filterBusqueda" placeholder="Ej: Juan Pérez" />
+      </div>
+      <div class="filter-group">
+        <label>Desde</label>
+        <input type="date" id="filterDesde" />
+      </div>
+      <div class="filter-group">
+        <label>Hasta</label>
+        <input type="date" id="filterHasta" />
+      </div>
+      <button onclick="cargar()">Filtrar</button>
+    </div>
 
-  <div class="actions">
-    <button class="secondary" onclick="exportarCSV()">Exportar CSV</button>
+    <div class="summary" id="summary"></div>
+
+    <div class="actions">
+      <button class="secondary" onclick="exportarCSV()">Exportar CSV</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Proyecto</th>
+          <th>Nombre</th>
+          <th>Correo</th>
+          <th>Monto</th>
+          <th>Comisión</th>
+          <th>Neto</th>
+          <th>Estado</th>
+          <th>Fecha</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+
+    <div class="empty" id="empty" style="display:none;">No hay donaciones registradas.</div>
   </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Proyecto</th>
-        <th>Nombre</th>
-        <th>Monto</th>
-        <th>Comisión</th>
-        <th>Neto</th>
-        <th>Estado</th>
-        <th>Fecha</th>
-      </tr>
-    </thead>
-    <tbody id="tbody"></tbody>
-  </table>
+  <!-- ── TAB: CONFIGURACIÓN ──────────────────────────────── -->
+  <div class="tab-panel" id="panel-configuracion">
+    <div class="config-card">
+      <div class="config-field">
+        <label>Comisión (%)</label>
+        <div class="input-wrap">
+          <input type="number" id="cfgComisionPct" step="0.01" min="0" max="100" />
+        </div>
+        <div class="hint">Porcentaje que se descuenta de cada donación.</div>
+      </div>
 
-  <div class="empty" id="empty" style="display:none;">No hay donaciones registradas.</div>
+      <div class="config-field">
+        <label>Fee fijo por transacción (S/)</label>
+        <div class="input-wrap">
+          <input type="number" id="cfgFeeFijo" step="0.01" min="0" />
+        </div>
+        <div class="hint">Cargo fijo adicional por transacción (referencia: Culqi cobra S/ 0.74).</div>
+      </div>
+
+      <div class="config-field">
+        <label>Monto mínimo de donación (S/)</label>
+        <div class="input-wrap">
+          <input type="number" id="cfgMontoMinimo" step="0.01" min="0" />
+        </div>
+        <div class="hint">Monto más bajo que se permite donar en las 3 páginas web.</div>
+      </div>
+
+      <button onclick="guardarConfig()">Guardar cambios</button>
+      <div class="config-status" id="cfgStatus"></div>
+
+      <div class="config-preview" id="cfgPreview"></div>
+    </div>
+  </div>
 
   <script>
     const TOKEN = window.location.pathname.split('/').pop()
 
-    async function api(path) {
+    async function api(path, options = {}) {
       const sep = path.includes('?') ? '&' : '?'
-      const res = await fetch(`/api${path}${sep}token=${TOKEN}`)
-      if (!res.ok) throw new Error('No autorizado')
+      const opts = { ...options }
+      opts.headers = { ...(opts.headers || {}), 'x-admin-token': TOKEN }
+      const res = await fetch(`/api${path}${sep}token=${TOKEN}`, opts)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || 'No autorizado')
+      }
       return res.json()
     }
 
+    // ── Tabs ──────────────────────────────────────────────
+    function cambiarTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab))
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'))
+      document.getElementById(`panel-${tab}`).classList.add('active')
+      if (tab === 'configuracion') cargarConfig()
+    }
+
+    // ── Movimientos ───────────────────────────────────────
     async function cargar() {
       const proyecto = document.getElementById('filterProyecto').value
+      const busqueda = document.getElementById('filterBusqueda').value
       const desde = document.getElementById('filterDesde').value
       const hasta = document.getElementById('filterHasta').value
 
       const params = new URLSearchParams()
       if (proyecto) params.set('proyecto', proyecto)
+      if (busqueda) params.set('busqueda', busqueda)
       if (desde) params.set('desde', desde)
       if (hasta) params.set('hasta', hasta)
 
@@ -169,6 +278,7 @@
       if (!donaciones || donaciones.length === 0) {
         tbody.innerHTML = ''
         empty.style.display = 'block'
+        empty.textContent = 'No hay donaciones registradas.'
         return
       }
 
@@ -178,6 +288,7 @@
           <td>${d.id}</td>
           <td><span class="badge badge-proyecto">${d.proyecto}</span></td>
           <td>${d.anonimo ? '<span class="badge badge-anonimo">Anónimo</span>' : d.nombre}</td>
+          <td>${d.correo || '—'}</td>
           <td>S/ ${d.monto.toFixed(2)}</td>
           <td>S/ ${d.comision.toFixed(2)}</td>
           <td>S/ ${d.monto_neto.toFixed(2)}</td>
@@ -202,14 +313,69 @@
 
     function exportarCSV() {
       const proyecto = document.getElementById('filterProyecto').value
+      const busqueda = document.getElementById('filterBusqueda').value
       const desde = document.getElementById('filterDesde').value
       const hasta = document.getElementById('filterHasta').value
       const params = new URLSearchParams()
       if (proyecto) params.set('proyecto', proyecto)
+      if (busqueda) params.set('busqueda', busqueda)
       if (desde) params.set('desde', desde)
       if (hasta) params.set('hasta', hasta)
       params.set('token', TOKEN)
       window.location.href = `/api/donaciones/csv?${params}`
+    }
+
+    // ── Configuración ─────────────────────────────────────
+    async function cargarConfig() {
+      const status = document.getElementById('cfgStatus')
+      status.textContent = ''
+      status.className = 'config-status'
+      try {
+        const data = await api('/config')
+        document.getElementById('cfgComisionPct').value = data.comision_pct
+        document.getElementById('cfgFeeFijo').value = data.fee_fijo
+        document.getElementById('cfgMontoMinimo').value = data.monto_minimo
+        actualizarPreview(data)
+      } catch (err) {
+        status.textContent = 'Error al cargar la configuración: ' + err.message
+        status.className = 'config-status error'
+      }
+    }
+
+    function actualizarPreview(data) {
+      const ejemploMonto = 50
+      const comision = Math.round((ejemploMonto * data.comision_pct / 100 + data.fee_fijo) * 100) / 100
+      const neto = Math.round((ejemploMonto - comision) * 100) / 100
+      document.getElementById('cfgPreview').innerHTML = `
+        <div><strong>Vista previa:</strong> con estos valores, una donación de S/ ${ejemploMonto.toFixed(2)}
+        generaría S/ ${comision.toFixed(2)} de comisión total, quedando S/ ${neto.toFixed(2)} netos.</div>
+        <div style="margin-top:6px;">El monto mínimo permitido para donar sería S/ ${Number(data.monto_minimo).toFixed(2)}.</div>
+        <div style="margin-top:6px;">Estos valores se aplican automáticamente en las 3 páginas web (frate.lat, Freestyle Católico y Cajón Peruano).</div>
+      `
+    }
+
+    async function guardarConfig() {
+      const status = document.getElementById('cfgStatus')
+      const comision_pct = document.getElementById('cfgComisionPct').value
+      const fee_fijo = document.getElementById('cfgFeeFijo').value
+      const monto_minimo = document.getElementById('cfgMontoMinimo').value
+
+      status.textContent = 'Guardando...'
+      status.className = 'config-status'
+
+      try {
+        const data = await api('/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comision_pct, fee_fijo, monto_minimo }),
+        })
+        status.textContent = '✓ Configuración guardada correctamente.'
+        status.className = 'config-status ok'
+        actualizarPreview(data)
+      } catch (err) {
+        status.textContent = 'Error al guardar: ' + err.message
+        status.className = 'config-status error'
+      }
     }
 
     cargarProyectos()
