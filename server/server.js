@@ -312,7 +312,7 @@ app.post('/api/convocatoria', async (req, res) => {
 // ── Ruta: Enviar mensaje de contacto ───────────────────────
 app.post('/api/contacto', async (req, res) => {
   try {
-    const { nombre, correo, mensaje, proyecto } = req.body
+    const { nombre, correo, mensaje, proyecto, asunto } = req.body
 
     if (!nombre || !correo || !mensaje) {
       return res.status(400).json({ ok: false, error: 'Faltan campos obligatorios.' })
@@ -334,6 +334,10 @@ app.post('/api/contacto', async (req, res) => {
             <td style="padding: 8px 0; color: #948d9e; font-size: 12px;">Correo</td>
             <td style="padding: 8px 0; color: #f3ead3; font-size: 14px;">${correo}</td>
           </tr>
+          ${asunto ? `<tr>
+            <td style="padding: 8px 0; color: #948d9e; font-size: 12px;">Asunto</td>
+            <td style="padding: 8px 0; color: #f3ead3; font-size: 14px;">${asunto}</td>
+          </tr>` : ''}
           <tr>
             <td style="padding: 8px 0; color: #948d9e; font-size: 12px;">Mensaje</td>
             <td style="padding: 8px 0; color: #f3ead3; font-size: 14px;">${mensaje}</td>
@@ -348,7 +352,7 @@ app.post('/api/contacto', async (req, res) => {
     await transporter.sendMail({
       from: `"${config.nombre}" <${process.env.SMTP_USER}>`,
       to: process.env.EMAIL_TO || 'info@frate.lat',
-      subject: `${config.asuntoContacto} — ${nombre}`,
+      subject: `${config.asuntoContacto} (${asunto || 'General'}) — ${nombre}`,
       html,
       replyTo: correo,
     })
