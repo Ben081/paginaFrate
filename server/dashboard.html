@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Donaciones — Frate</title>
+  <title>Administracion de Donaciones — Frate</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -79,8 +79,13 @@
       display: inline-block; padding: 2px 8px; border-radius: 99px;
       font-size: 11px; font-weight: 600;
     }
-    .badge-proyecto { background: rgba(201,162,39,0.15); color: #e0bc4a; }
     .badge-anonimo { background: rgba(148,141,158,0.15); color: #948d9e; }
+    /* Colores fijos por proyecto conocido — se distinguen de un vistazo en la tabla */
+    .badge-proy-frate { background: rgba(201,162,39,0.15); color: #e0bc4a; }
+    .badge-proy-freestyle-catolico { background: rgba(138,92,246,0.15); color: #a78bfa; }
+    .badge-proy-cajon-peruano { background: rgba(217,138,84,0.18); color: #d98a54; }
+    /* Fallback para proyectos futuros no listados arriba (color generado por JS) */
+    .badge-proyecto { background: rgba(148,141,158,0.15); color: #b9b3c2; }
     .badge-completado { background: rgba(76,175,80,0.15); color: #4caf50; }
     .badge-pendiente { background: rgba(255,193,7,0.15); color: #ffc107; }
     .badge-fallido { background: rgba(244,67,54,0.15); color: #f44336; }
@@ -182,7 +187,6 @@
           <th>ID</th>
           <th>Proyecto</th>
           <th>Nombre</th>
-          <th>Correo</th>
           <th>Monto</th>
           <th>Comisión</th>
           <th>Neto</th>
@@ -319,6 +323,15 @@
       `).join('')
     }
 
+    // ── Color por proyecto: usa la clase fija si el proyecto es conocido,
+    // o cae en el badge genérico si es un proyecto nuevo no listado en el CSS ──
+    const PROYECTOS_CON_COLOR = ['frate', 'freestyle-catolico', 'cajon-peruano']
+    function claseProyecto(proyecto) {
+      return PROYECTOS_CON_COLOR.includes(proyecto)
+        ? `badge-proy-${proyecto}`
+        : 'badge-proyecto'
+    }
+
     function renderTabla(donaciones) {
       const tbody = document.getElementById('tbody')
       const empty = document.getElementById('empty')
@@ -334,9 +347,8 @@
       tbody.innerHTML = donaciones.map(d => `
         <tr>
           <td>${d.id}</td>
-          <td><span class="badge badge-proyecto">${d.proyecto}</span></td>
+          <td><span class="badge ${claseProyecto(d.proyecto)}">${d.proyecto}</span></td>
           <td>${d.anonimo ? '<span class="badge badge-anonimo">Anónimo</span>' : d.nombre}</td>
-          <td>${d.correo || '—'}</td>
           <td>S/ ${d.monto.toFixed(2)}</td>
           <td>S/ ${d.comision.toFixed(2)}</td>
           <td>S/ ${d.monto_neto.toFixed(2)}</td>
