@@ -40,11 +40,13 @@ function calcularComision(monto) {
   const config = getAllConfig()
   const comisionPct = Number(config.comision_pct) || 0
   const feeFijo = Number(config.fee_fijo) || 0
+  const comisionFratePct = Number(config.comision_frate_pct) || 0
 
-  const comision = Math.round((monto * comisionPct / 100 + feeFijo) * 100) / 100
-  const montoNeto = Math.round((monto - comision) * 100) / 100
+  const comisionCulqi = Math.round((monto * comisionPct / 100 + feeFijo) * 100) / 100
+  const comisionFrate = Math.round((monto * comisionFratePct / 100) * 100) / 100
+  const montoNeto = Math.round((monto - comisionCulqi - comisionFrate) * 100) / 100
 
-  return { comision, montoNeto, feeFijo }
+  return { comision: comisionCulqi, comisionFrate, montoNeto, feeFijo }
 }
 
 // ── Culqui: Configuración (COMENTADO - activar cuando se tengan los tokens) ──
@@ -105,6 +107,7 @@ app.get('/api/config', (_req, res) => {
       comision_pct: Number(config.comision_pct),
       fee_fijo: Number(config.fee_fijo),
       monto_minimo: Number(config.monto_minimo),
+      comision_frate_pct: Number(config.comision_frate_pct),
     })
   } catch (err) {
     console.error('Error al leer configuración:', err)
@@ -115,7 +118,7 @@ app.get('/api/config', (_req, res) => {
 // ── Configuración: actualización (solo admin, desde el panel) ──
 app.put('/api/config', requireAdmin, (req, res) => {
   try {
-    const { comision_pct, fee_fijo, monto_minimo } = req.body
+    const { comision_pct, fee_fijo, monto_minimo, comision_frate_pct } = req.body
     const cambios = {}
 
     if (comision_pct !== undefined) {
@@ -139,6 +142,13 @@ app.put('/api/config', requireAdmin, (req, res) => {
       }
       cambios.monto_minimo = v
     }
+    if (comision_frate_pct !== undefined) {
+      const v = Number(comision_frate_pct)
+      if (Number.isNaN(v) || v < 0 || v > 100) {
+        return res.status(400).json({ ok: false, error: 'comision_frate_pct inválido (0-100).' })
+      }
+      cambios.comision_frate_pct = v
+    }
 
     if (Object.keys(cambios).length === 0) {
       return res.status(400).json({ ok: false, error: 'No se envió ningún valor para actualizar.' })
@@ -150,6 +160,7 @@ app.put('/api/config', requireAdmin, (req, res) => {
       comision_pct: Number(config.comision_pct),
       fee_fijo: Number(config.fee_fijo),
       monto_minimo: Number(config.monto_minimo),
+      comision_frate_pct: Number(config.comision_frate_pct),
     })
   } catch (err) {
     console.error('Error al actualizar configuración:', err)
@@ -176,7 +187,7 @@ app.post('/api/donaciones', async (req, res) => {
       })
     }
 
-    const { comision, montoNeto, feeFijo } = calcularComision(montoNum)
+    const { comision, comisionFrate, montoNeto, feeFijo } = calcularComision(montoNum)
 
     // ── Culqui: Validar pago (COMENTADO - activar cuando se tengan los tokens) ──
     // let estadoPago = 'simulado'
@@ -205,8 +216,8 @@ app.post('/api/donaciones', async (req, res) => {
     const pagoId = null
 
     const stmt = db.prepare(`
-      INSERT INTO donaciones (proyecto, nombre, correo, monto, comision, monto_neto, fee, anonimo, fuente, estado_pago, pago_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO donaciones (proyecto, nombre, correo, monto, comision, comision_frate, monto_neto, fee, anonimo, fuente, estado_pago, pago_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     const result = stmt.run(
@@ -215,6 +226,7 @@ app.post('/api/donaciones', async (req, res) => {
       correo || null,
       montoNum,
       comision,
+      comisionFrate,
       montoNeto,
       feeFijo,
       anonimo ? 1 : 0,
@@ -387,6 +399,7 @@ app.get('/api/donaciones', requireAdmin, (req, res) => {
         COUNT(*) as total_donaciones,
         SUM(monto) as total_monto,
         SUM(comision) as total_comision,
+        SUM(comision_frate) as total_comision_frate,
         SUM(monto_neto) as total_neto,
         SUM(fee) as total_fee
       FROM donaciones WHERE 1=1
@@ -427,9 +440,9 @@ app.get('/api/donaciones/csv', requireAdmin, (req, res) => {
     sql += ' ORDER BY creado_en DESC'
     const donaciones = db.prepare(sql).all(...params)
 
-    const header = 'ID,Proyecto,Nombre,Correo,Monto,Comisión,Monto Neto,Fee,Anónimo,Fuente,Estado,Fecha'
+    const header = 'ID,Proyecto,Nombre,Correo,Monto,Comisión Culqi,Comisión Frate,Monto Neto,Fee,Anónimo,Fuente,Estado,Fecha'
     const rows = donaciones.map(d =>
-      [d.id, d.proyecto, `"${d.nombre}"`, d.correo || '', d.monto, d.comision, d.monto_neto, d.fee, d.anonimo ? 'Sí' : 'No', d.fuente, d.estado_pago, d.creado_en].join(',')
+      [d.id, d.proyecto, `"${d.nombre}"`, d.correo || '', d.monto, d.comision, d.comision_frate, d.monto_neto, d.fee, d.anonimo ? 'Sí' : 'No', d.fuente, d.estado_pago, d.creado_en].join(',')
     )
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')

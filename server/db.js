@@ -40,11 +40,19 @@ db.exec(`
   );
 `)
 
+// ── Migración: columna comision_frate en donaciones (se agrega si no existe) ──
+try {
+  db.exec(`ALTER TABLE donaciones ADD COLUMN comision_frate REAL NOT NULL DEFAULT 0`)
+} catch (e) {
+  // La columna ya existe, no hacer nada
+}
+
 // ── Valores por defecto (solo se insertan si no existen) ──
 const defaults = {
-  comision_pct: '5',      // % de comisión sobre el monto donado
-  fee_fijo: '0.74',       // fee fijo en soles por transacción (referencia Culqi)
-  monto_minimo: '15',     // monto mínimo permitido para donar (soles)
+  comision_pct: '5',         // % de comisión sobre el monto donado (proveedor de pagos)
+  fee_fijo: '0.74',          // fee fijo en soles por transacción (referencia de tercero)
+  monto_minimo: '15',        // monto mínimo permitido para donar (soles)
+  comision_frate_pct: '0',   // % que se queda FRATE como comisión propia
 }
 
 const insertDefault = db.prepare(

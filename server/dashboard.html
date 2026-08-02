@@ -115,6 +115,27 @@
       font-size: 13px; color: #948d9e; line-height: 1.7;
     }
     .config-preview strong { color: #e0bc4a; }
+
+    /* Resumen */
+    .resumen-filters {
+      display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; align-items: flex-end;
+    }
+    .resumen-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px; margin-bottom: 24px;
+    }
+    .resumen-card {
+      background: #18181b; border: 1px solid rgba(201,162,39,0.15);
+      border-radius: 12px; padding: 20px;
+    }
+    .resumen-card .label { font-size: 11px; color: #948d9e; text-transform: uppercase; letter-spacing: 0.08em; }
+    .resumen-card .value { font-size: 24px; font-weight: 700; color: #e0bc4a; margin-top: 4px; }
+    .resumen-total {
+      background: #18181b; border: 1px solid rgba(201,162,39,0.3);
+      border-radius: 12px; padding: 24px; margin-bottom: 24px;
+    }
+    .resumen-total .label { font-size: 11px; color: #948d9e; text-transform: uppercase; letter-spacing: 0.08em; }
+    .resumen-total .value { font-size: 32px; font-weight: 700; color: #e0bc4a; margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -123,6 +144,7 @@
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="movimientos" onclick="cambiarTab('movimientos')">Movimientos</button>
+    <button class="tab-btn" data-tab="resumen" onclick="cambiarTab('resumen')">Resumen</button>
     <button class="tab-btn" data-tab="configuracion" onclick="cambiarTab('configuracion')">Configuración</button>
   </div>
 
@@ -174,23 +196,48 @@
     <div class="empty" id="empty" style="display:none;">No hay donaciones registradas.</div>
   </div>
 
+  <!-- ── TAB: RESUMEN ─────────────────────────────────────── -->
+  <div class="tab-panel" id="panel-resumen">
+    <div class="resumen-filters">
+      <div class="filter-group">
+        <label>Proyecto</label>
+        <select id="resumenProyecto"><option value="">Todos</option></select>
+      </div>
+      <button onclick="cargarResumen()">Filtrar</button>
+    </div>
+
+    <div class="resumen-total" id="resumenTotal"></div>
+
+    <div class="resumen-grid" id="resumenGrid"></div>
+
+    <div class="empty" id="resumenEmpty" style="display:none;">No hay donaciones registradas.</div>
+  </div>
+
   <!-- ── TAB: CONFIGURACIÓN ──────────────────────────────── -->
   <div class="tab-panel" id="panel-configuracion">
     <div class="config-card">
       <div class="config-field">
-        <label>Comisión (%)</label>
+        <label>Comisión Culqi (%)</label>
         <div class="input-wrap">
           <input type="number" id="cfgComisionPct" step="0.01" min="0" max="100" />
         </div>
-        <div class="hint">Porcentaje que se descuenta de cada donación.</div>
+        <div class="hint">Porcentaje que se lleva el proveedor de pagos (Culqi) por cada donación.</div>
       </div>
 
       <div class="config-field">
-        <label>Fee fijo por transacción (S/)</label>
+        <label>Fee fijo Culqi (S/)</label>
         <div class="input-wrap">
           <input type="number" id="cfgFeeFijo" step="0.01" min="0" />
         </div>
         <div class="hint">Cargo fijo adicional por transacción (referencia: Culqi cobra S/ 0.74).</div>
+      </div>
+
+      <div class="config-field">
+        <label>Comisión Frate (%)</label>
+        <div class="input-wrap">
+          <input type="number" id="cfgComisionFratePct" step="0.01" min="0" max="100" />
+        </div>
+        <div class="hint">Porcentaje que se queda FRATE, separado de lo que cobra Culqi.</div>
       </div>
 
       <div class="config-field">
@@ -229,6 +276,7 @@
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'))
       document.getElementById(`panel-${tab}`).classList.add('active')
       if (tab === 'configuracion') cargarConfig()
+      if (tab === 'resumen') cargarResumen()
     }
 
     // ── Movimientos ───────────────────────────────────────
@@ -301,12 +349,14 @@
     async function cargarProyectos() {
       try {
         const data = await api('/proyectos')
-        const select = document.getElementById('filterProyecto')
+        const selects = [document.getElementById('filterProyecto'), document.getElementById('resumenProyecto')]
         data.proyectos.forEach(p => {
-          const opt = document.createElement('option')
-          opt.value = p
-          opt.textContent = p
-          select.appendChild(opt)
+          selects.forEach(select => {
+            const opt = document.createElement('option')
+            opt.value = p
+            opt.textContent = p
+            select.appendChild(opt)
+          })
         })
       } catch { /* silenciar */ }
     }
@@ -325,6 +375,73 @@
       window.location.href = `/api/donaciones/csv?${params}`
     }
 
+    // ── Resumen (totales por proyecto: recaudado, comisiones y neto) ──
+    async function cargarResumen() {
+      const proyecto = document.getElementById('resumenProyecto').value
+      const params = new URLSearchParams()
+      if (proyecto) params.set('proyecto', proyecto)
+
+      const totalEl = document.getElementById('resumenTotal')
+      const gridEl = document.getElementById('resumenGrid')
+      const emptyEl = document.getElementById('resumenEmpty')
+
+      try {
+        const data = await api(`/donaciones?${params}`)
+        const resumen = data.resumen || []
+
+        if (resumen.length === 0) {
+          totalEl.innerHTML = ''
+          gridEl.innerHTML = ''
+          emptyEl.style.display = 'block'
+          return
+        }
+        emptyEl.style.display = 'none'
+
+        // Total global (suma de todos los proyectos mostrados, respetando el filtro)
+        const totales = resumen.reduce((acc, r) => {
+          acc.total_monto += r.total_monto || 0
+          acc.total_comision += r.total_comision || 0
+          acc.total_comision_frate += r.total_comision_frate || 0
+          acc.total_fee += r.total_fee || 0
+          acc.total_neto += r.total_neto || 0
+          acc.total_donaciones += r.total_donaciones || 0
+          return acc
+        }, { total_monto: 0, total_comision: 0, total_comision_frate: 0, total_fee: 0, total_neto: 0, total_donaciones: 0 })
+
+        totalEl.innerHTML = `
+          <div class="label">${proyecto || 'Total recaudado (todos los proyectos)'}</div>
+          <div class="value">S/ ${totales.total_monto.toFixed(2)}</div>
+          <div class="sub" style="margin-top:6px; color:#948d9e; font-size:13px;">
+            ${totales.total_donaciones} donaciones · Neto final: S/ ${totales.total_neto.toFixed(2)}
+          </div>
+        `
+
+        gridEl.innerHTML = `
+          <div class="resumen-card">
+            <div class="label">Comisión Culqi (%)</div>
+            <div class="value">S/ ${totales.total_comision.toFixed(2)}</div>
+          </div>
+          <div class="resumen-card">
+            <div class="label">Fee fijo Culqi (S/)</div>
+            <div class="value">S/ ${totales.total_fee.toFixed(2)}</div>
+          </div>
+          <div class="resumen-card">
+            <div class="label">Comisión Frate (%)</div>
+            <div class="value">S/ ${totales.total_comision_frate.toFixed(2)}</div>
+          </div>
+          <div class="resumen-card">
+            <div class="label">Neto disponible</div>
+            <div class="value">S/ ${totales.total_neto.toFixed(2)}</div>
+          </div>
+        `
+      } catch (err) {
+        totalEl.innerHTML = ''
+        gridEl.innerHTML = ''
+        emptyEl.style.display = 'block'
+        emptyEl.textContent = 'Error de conexión o token inválido.'
+      }
+    }
+
     // ── Configuración ─────────────────────────────────────
     async function cargarConfig() {
       const status = document.getElementById('cfgStatus')
@@ -335,6 +452,7 @@
         document.getElementById('cfgComisionPct').value = data.comision_pct
         document.getElementById('cfgFeeFijo').value = data.fee_fijo
         document.getElementById('cfgMontoMinimo').value = data.monto_minimo
+        document.getElementById('cfgComisionFratePct').value = data.comision_frate_pct
         actualizarPreview(data)
       } catch (err) {
         status.textContent = 'Error al cargar la configuración: ' + err.message
@@ -344,11 +462,13 @@
 
     function actualizarPreview(data) {
       const ejemploMonto = 50
-      const comision = Math.round((ejemploMonto * data.comision_pct / 100 + data.fee_fijo) * 100) / 100
-      const neto = Math.round((ejemploMonto - comision) * 100) / 100
+      const comisionCulqi = Math.round((ejemploMonto * data.comision_pct / 100 + data.fee_fijo) * 100) / 100
+      const comisionFrate = Math.round((ejemploMonto * data.comision_frate_pct / 100) * 100) / 100
+      const neto = Math.round((ejemploMonto - comisionCulqi - comisionFrate) * 100) / 100
       document.getElementById('cfgPreview').innerHTML = `
         <div><strong>Vista previa:</strong> con estos valores, una donación de S/ ${ejemploMonto.toFixed(2)}
-        generaría S/ ${comision.toFixed(2)} de comisión total, quedando S/ ${neto.toFixed(2)} netos.</div>
+        generaría S/ ${comisionCulqi.toFixed(2)} de comisión Culqi y S/ ${comisionFrate.toFixed(2)} de comisión Frate,
+        quedando S/ ${neto.toFixed(2)} netos.</div>
         <div style="margin-top:6px;">El monto mínimo permitido para donar sería S/ ${Number(data.monto_minimo).toFixed(2)}.</div>
         <div style="margin-top:6px;">Estos valores se aplican automáticamente en las 3 páginas web (frate.lat, Freestyle Católico y Cajón Peruano).</div>
       `
@@ -359,6 +479,7 @@
       const comision_pct = document.getElementById('cfgComisionPct').value
       const fee_fijo = document.getElementById('cfgFeeFijo').value
       const monto_minimo = document.getElementById('cfgMontoMinimo').value
+      const comision_frate_pct = document.getElementById('cfgComisionFratePct').value
 
       status.textContent = 'Guardando...'
       status.className = 'config-status'
@@ -367,7 +488,7 @@
         const data = await api('/config', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ comision_pct, fee_fijo, monto_minimo }),
+          body: JSON.stringify({ comision_pct, fee_fijo, monto_minimo, comision_frate_pct }),
         })
         status.textContent = '✓ Configuración guardada correctamente.'
         status.className = 'config-status ok'
