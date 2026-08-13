@@ -9,8 +9,8 @@ export const stats = [
 
 export const proyectos = [
   {
-    id: 'puente-calicanto',
-    tag: 'puente-calicanto',
+    id: 'puente',
+    tag: 'puente',
     escudo: 'PC',
     year: '2026',
     title: 'Puente Calicanto',
