@@ -8,7 +8,7 @@ const TABS = [
 ]
 
 const TAG_STYLES = {
-  freestyle: {
+  puente: {
     top: 'bg-gradient-to-br from-[#1B1730] to-[#241f3d]',
     escudo: 'bg-[#1B1730] text-[#E0BC4A] border border-[#E0BC4A55]',
     link: 'text-[#D6336C]',
