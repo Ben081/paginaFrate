@@ -78,6 +78,12 @@ const configProyectos = {
     asuntoContacto: '[FRATE] Nuevo mensaje de contacto',
     footer: 'FRATE — Gestores de industria cultural, artística y musical',
   },
+  'puente-calicanto': {
+    nombre: 'Puente Calicanto',
+    asuntoConvocatoria: '[Puente Calicanto] Nueva postulación',
+    asuntoContacto: '[Puente Calicanto] Nuevo mensaje de contacto',
+    footer: 'Puente Calicanto 2026 — Ecosistema de Crowdfunding para la Producción de Pistas Musicales Litúrgicas',
+  },
 }
 
 function getConfigProyecto(proyecto) {
