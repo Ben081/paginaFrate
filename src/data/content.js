@@ -9,14 +9,14 @@ export const stats = [
 
 export const proyectos = [
   {
-    id: 'freestyle',
-    tag: 'freestyle',
-    escudo: 'FC',
+    id: 'puente-calicanto',
+    tag: 'puente-calicanto',
+    escudo: 'PC',
     year: '2026',
-    title: 'Freestyle Católico',
-    desc: 'Coaching corporativo con freestyle y espiritualidad benedictina en 11 instituciones de educación superior.',
-    achievements: ['11 instituciones', '8 rounds', '1,110 beneficiarios'],
-    link: 'https://freestylecatolico.frate.lat',
+    title: 'Puente Calicanto',
+    desc: 'Producción de pistas musicales litúrgicas para cuarteto de cuerdas y orquesta sinfónica, dedicadas a los niños de la Aldea Infantil San Juan Bosco.',
+    achievements: ['15 pistas musicales', '30 niños beneficiarios', '15 estudiantes voluntarios'],
+    link: 'https://calicanto.frate.lat',
     soon: false,
   },
   {
