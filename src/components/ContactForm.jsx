@@ -76,7 +76,7 @@ export default function ContactForm({ onSuccess }) {
           <input
             required
             name="nombre"
-            placeholder="Tu nombre"
+            placeholder="su nombre"
             className="mt-1.5 w-full rounded-lg border border-line bg-ink px-4 py-2.5 text-paper outline-none focus:border-gold"
           />
         </div>
@@ -88,7 +88,7 @@ export default function ContactForm({ onSuccess }) {
             required
             type="email"
             name="correo"
-            placeholder="tuemail@ejemplo.com"
+            placeholder="suemail@ejemplo.com"
             className="mt-1.5 w-full rounded-lg border border-line bg-ink px-4 py-2.5 text-paper outline-none focus:border-gold"
           />
         </div>

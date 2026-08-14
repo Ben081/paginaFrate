@@ -40,6 +40,34 @@ db.exec(`
   );
 `)
 
+// ── Tabla de Libro de Reclamaciones ──
+db.exec(`
+  CREATE TABLE IF NOT EXISTS reclamaciones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo_unico TEXT NOT NULL UNIQUE,
+    nombre_proveedor TEXT NOT NULL DEFAULT 'Aland Bravo Vecorena',
+    ruc_proveedor TEXT NOT NULL DEFAULT '10107356911',
+    direccion_proveedor TEXT NOT NULL DEFAULT 'Huánuco, Perú',
+    nombre_consumidor TEXT NOT NULL,
+    domicilio_consumidor TEXT,
+    dni_consumidor TEXT,
+    telefono_consumidor TEXT,
+    correo_consumidor TEXT,
+    padre_representante TEXT,
+    producto_servicio TEXT NOT NULL,
+    monto REAL DEFAULT 0,
+    detalle_reclamo TEXT NOT NULL,
+    pedido_concreto TEXT,
+    acciones_proveedor TEXT,
+    estado TEXT NOT NULL DEFAULT 'pendiente',
+    creado_en TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_reclamaciones_codigo ON reclamaciones(codigo_unico);
+  CREATE INDEX IF NOT EXISTS idx_reclamaciones_estado ON reclamaciones(estado);
+  CREATE INDEX IF NOT EXISTS idx_reclamaciones_fecha ON reclamaciones(creado_en);
+`)
+
 // ── Migración: columna comision_frate en donaciones (se agrega si no existe) ──
 try {
   db.exec(`ALTER TABLE donaciones ADD COLUMN comision_frate REAL NOT NULL DEFAULT 0`)

@@ -13,12 +13,6 @@ export default function Contacto() {
             ¿Tienes un proyecto en mente? ... ¿Quieres colaborar con nosotros? Escríbenos y hablemos
             sobre cómo podemos trabajar juntos.
           </p>
-          <a
-            href={`mailto:${contacto.email}`}
-            className="block mt-5 text-[20px] font-serif text-gold-bright no-underline"
-          >
-            {contacto.email}
-          </a>
           {/* <div className="flex gap-2.5 mt-5">
             {contacto.redes.map((r) => (
               <a

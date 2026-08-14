@@ -370,6 +370,277 @@ app.post('/api/contacto', async (req, res) => {
   }
 })
 
+// ── Generar código único para reclamaciones ──
+function generarCodigoReclamacion() {
+  const now = new Date()
+  const year = now.getFullYear()
+  const stmt = db.prepare("SELECT COUNT(*) as total FROM reclamaciones WHERE strftime('%Y', creado_en) = ?")
+  const { total } = stmt.get(String(year))
+  const num = String(total + 1).padStart(7, '0')
+  return `LR-${num}-${year}`
+}
+
+// ── Libro de Reclamaciones: Registrar reclamo ──
+app.post('/api/reclamaciones', async (req, res) => {
+  try {
+    const {
+      nombre_consumidor,
+      domicilio_consumidor,
+      dni_consumidor,
+      telefono_consumidor,
+      correo_consumidor,
+      padre_representante,
+      producto_servicio,
+      monto,
+      detalle_reclamo,
+      pedido_concreto,
+    } = req.body
+
+    if (!nombre_consumidor || !dni_consumidor || !correo_consumidor || !producto_servicio || !detalle_reclamo) {
+      return res.status(400).json({ ok: false, error: 'Faltan campos obligatorios.' })
+    }
+
+    const codigo_unico = generarCodigoReclamacion()
+
+    const stmt = db.prepare(`
+      INSERT INTO reclamaciones (codigo_unico, nombre_consumidor, domicilio_consumidor, dni_consumidor, telefono_consumidor, correo_consumidor, padre_representante, producto_servicio, monto, detalle_reclamo, pedido_concreto)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+
+    stmt.run(
+      codigo_unico,
+      nombre_consumidor,
+      domicilio_consumidor || '',
+      dni_consumidor,
+      telefono_consumidor || '',
+      correo_consumidor,
+      padre_representante || '',
+      producto_servicio,
+      Number(monto) || 0,
+      detalle_reclamo,
+      pedido_concreto || ''
+    )
+
+    // ── Correo al proveedor (FRATE) ──
+    const htmlProveedor = `
+      <div style="font-family: 'DM Sans', sans-serif; max-width: 560px; margin: 0 auto; padding: 32px; background: #0f0f12; border-radius: 12px; border: 1px solid rgba(201,162,39,0.3);">
+        <h2 style="color: #e0bc4a; font-size: 13px; letter-spacing: 0.1em; margin: 0;">LIBRO DE RECLAMACIONES — FRATE</h2>
+        <h3 style="color: #f3ead3; font-size: 20px; margin: 8px 0 20px;">Nuevo reclamo recibido</h3>
+        <p style="color: #948d9e; font-size: 12px; margin: 0 0 16px;">Código: <strong style="color: #e0bc4a;">${codigo_unico}</strong></p>
+
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 8px 0; color: #948d9e; font-size: 12px; width: 140px;">Consumidor</td>
+            <td style="padding: 8px 0; color: #f3ead3; font-size: 14px;">${nombre_consumidor}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #948d9e; font-size: 12px;">DNI/CE</td>
+            <td style="padding: 8px 0; color: #f3ead3; font-size: 14px;">${dni_consumidor}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #948d9e; font-size: 12px;">Correo</td>
+            <td style="padding: 8px 0; color: #f3ead3; font-size: 14px;">${correo_consumidor}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #948d9e; font-size: 12px;">Teléfono</td>
+            <td style="padding: 8px 0; color: #f3ead3; font-size: 14px;">${telefono_consumidor || 'No proporcionado'}</td>
+          </tr>
+          ${padre_representante ? `<tr>
+            <td style="padding: 8px 0; color: #948d9e; font-size: 12px;">Padre/Representante</td>
+            <td style="padding: 8px 0; color: #f3ead3; font-size: 14px;">${padre_representante}</td>
+          </tr>` : ''}
+          <tr>
+            <td style="padding: 8px 0; color: #948d9e; font-size: 12px;">Producto/Servicio</td>
+            <td style="padding: 8px 0; color: #f3ead3; font-size: 14px;">${producto_servicio}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px 0; color: #948d9e; font-size: 12px;">Monto</td>
+            <td style="padding: 8px 0; color: #f3ead3; font-size: 14px;">S/ ${Number(monto || 0).toFixed(2)}</td>
+          </tr>
+        </table>
+
+        <hr style="border: none; border-top: 1px solid rgba(201,162,39,0.15); margin: 20px 0;" />
+
+        <div style="margin-bottom: 16px;">
+          <p style="color: #948d9e; font-size: 12px; margin: 0 0 6px;">Detalle del reclamo:</p>
+          <p style="color: #f3ead3; font-size: 14px; margin: 0; line-height: 1.5;">${detalle_reclamo}</p>
+        </div>
+
+        ${pedido_concreto ? `<div>
+          <p style="color: #948d9e; font-size: 12px; margin: 0 0 6px;">Pedido concreto:</p>
+          <p style="color: #f3ead3; font-size: 14px; margin: 0; line-height: 1.5;">${pedido_concreto}</p>
+        </div>` : ''}
+
+        <hr style="border: none; border-top: 1px solid rgba(201,162,39,0.15); margin: 20px 0;" />
+        <p style="color: #948d9e; font-size: 11px; margin: 0;">FRATE — Libro de Reclamaciones Virtual | Plazo de respuesta: 15 días hábiles</p>
+      </div>
+    `
+
+    await transporter.sendMail({
+      from: `"FRATE - Libro de Reclamaciones" <${process.env.SMTP_USER}>`,
+      to: process.env.EMAIL_TO || 'info@frate.lat',
+      subject: `[Libro de Reclamaciones] ${codigo_unico} — ${nombre_consumidor}`,
+      html: htmlProveedor,
+      replyTo: correo_consumidor,
+    })
+
+    // ── Correo al consumidor (copia) ──
+    const htmlConsumidor = `
+      <div style="font-family: 'DM Sans', sans-serif; max-width: 560px; margin: 0 auto; padding: 32px; background: #0f0f12; border-radius: 12px; border: 1px solid rgba(201,162,39,0.3);">
+        <h2 style="color: #e0bc4a; font-size: 13px; letter-spacing: 0.1em; margin: 0;">LIBRO DE RECLAMACIONES — FRATE</h2>
+        <h3 style="color: #f3ead3; font-size: 20px; margin: 8px 0 20px;">Constancia de recepción</h3>
+
+        <p style="color: #f3ead3; font-size: 14px; margin: 0 0 12px;">Estimado/a <strong>${nombre_consumidor}</strong>,</p>
+        <p style="color: #f3ead3; font-size: 14px; margin: 0 0 16px; line-height: 1.5;">Hemos recibido tu reclamo y este es el comprobante de registro. Guarda tu código para dar seguimiento.</p>
+
+        <div style="background: rgba(224,188,74,0.1); border: 1px solid rgba(224,188,74,0.3); border-radius: 8px; padding: 16px; text-align: center; margin: 20px 0;">
+          <p style="color: #948d9e; font-size: 11px; margin: 0 0 6px;">Tu código de reclamo</p>
+          <p style="color: #e0bc4a; font-size: 22px; font-weight: bold; margin: 0; letter-spacing: 0.05em;">${codigo_unico}</p>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 6px 0; color: #948d9e; font-size: 12px;">Fecha</td>
+            <td style="padding: 6px 0; color: #f3ead3; font-size: 13px;">${new Date().toLocaleDateString('es-PE')}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #948d9e; font-size: 12px;">Producto/Servicio</td>
+            <td style="padding: 6px 0; color: #f3ead3; font-size: 13px;">${producto_servicio}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #948d9e; font-size: 12px;">Estado</td>
+            <td style="padding: 6px 0; color: #f3ead3; font-size: 13px;">Pendiente de revisión</td>
+          </tr>
+        </table>
+
+        <hr style="border: none; border-top: 1px solid rgba(201,162,39,0.15); margin: 20px 0;" />
+
+        <p style="color: #948d9e; font-size: 12px; margin: 0; line-height: 1.5;">
+          El proveedor tiene un plazo máximo de <strong style="color: #f3ead3;">15 días hábiles</strong> para darte respuesta.
+          Si no recibes respuesta, puedes presentar tu reclamo ante INDECOPI.
+        </p>
+
+        <hr style="border: none; border-top: 1px solid rgba(201,162,39,0.15); margin: 20px 0;" />
+        <p style="color: #948d9e; font-size: 11px; margin: 0;">FRATE — Gestores de industria cultural, artística y musical | Huánuco, Perú</p>
+      </div>
+    `
+
+    await transporter.sendMail({
+      from: `"FRATE - Libro de Reclamaciones" <${process.env.SMTP_USER}>`,
+      to: correo_consumidor,
+      subject: `[FRATE] Constancia de reclamo ${codigo_unico}`,
+      html: htmlConsumidor,
+    })
+
+    res.json({ ok: true, codigo_unico })
+  } catch (err) {
+    console.error('Error al registrar reclamo:', err)
+    res.status(500).json({ ok: false, error: 'Error interno del servidor.' })
+  }
+})
+
+// ── Libro de Reclamaciones: Consultar estado (público) ──
+app.get('/api/reclamaciones/:codigo', (req, res) => {
+  try {
+    const reclamo = db.prepare(
+      'SELECT codigo_unico, nombre_consumidor, producto_servicio, estado, creado_en, acciones_proveedor FROM reclamaciones WHERE codigo_unico = ?'
+    ).get(req.params.codigo)
+
+    if (!reclamo) {
+      return res.status(404).json({ ok: false, error: 'Reclamo no encontrado.' })
+    }
+
+    res.json({ ok: true, reclamo })
+  } catch (err) {
+    console.error('Error al consultar reclamo:', err)
+    res.status(500).json({ ok: false, error: 'Error interno.' })
+  }
+})
+
+// ── Libro de Reclamaciones: Responder (solo admin) ──
+app.put('/api/reclamaciones/:codigo', requireAdmin, async (req, res) => {
+  try {
+    const { acciones_proveedor, estado } = req.body
+    const { codigo } = req.params
+
+    const reclamo = db.prepare('SELECT * FROM reclamaciones WHERE codigo_unico = ?').get(codigo)
+    if (!reclamo) {
+      return res.status(404).json({ ok: false, error: 'Reclamo no encontrado.' })
+    }
+
+    const nuevoEstado = estado || 'respondido'
+    db.prepare('UPDATE reclamaciones SET acciones_proveedor = ?, estado = ? WHERE codigo_unico = ?')
+      .run(acciones_proveedor || '', nuevoEstado, codigo)
+
+    // ── Notificar al consumidor ──
+    if (reclamo.correo_consumidor && acciones_proveedor) {
+      const htmlRespuesta = `
+        <div style="font-family: 'DM Sans', sans-serif; max-width: 560px; margin: 0 auto; padding: 32px; background: #0f0f12; border-radius: 12px; border: 1px solid rgba(201,162,39,0.3);">
+          <h2 style="color: #e0bc4a; font-size: 13px; letter-spacing: 0.1em; margin: 0;">LIBRO DE RECLAMACIONES — FRATE</h2>
+          <h3 style="color: #f3ead3; font-size: 20px; margin: 8px 0 20px;">Respuesta a tu reclamo</h3>
+
+          <div style="background: rgba(224,188,74,0.1); border: 1px solid rgba(224,188,74,0.3); border-radius: 8px; padding: 16px; text-align: center; margin: 20px 0;">
+            <p style="color: #948d9e; font-size: 11px; margin: 0 0 6px;">Código de reclamo</p>
+            <p style="color: #e0bc4a; font-size: 18px; font-weight: bold; margin: 0;">${codigo}</p>
+          </div>
+
+          <p style="color: #f3ead3; font-size: 14px; margin: 0 0 12px;">Estimado/a <strong>${reclamo.nombre_consumidor}</strong>,</p>
+          <p style="color: #f3ead3; font-size: 14px; margin: 0 0 16px; line-height: 1.5;">Hemos revisado tu reclamo y a continuación te proporcionamos nuestra respuesta:</p>
+
+          <div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 16px; margin: 16px 0;">
+            <p style="color: #f3ead3; font-size: 14px; margin: 0; line-height: 1.6;">${acciones_proveedor}</p>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid rgba(201,162,39,0.15); margin: 20px 0;" />
+          <p style="color: #948d9e; font-size: 12px; margin: 0; line-height: 1.5;">
+            Si no estás conforme con esta respuesta, puedes presentar tu reclamo ante <strong style="color: #f3ead3;">INDECOPI</strong>.
+          </p>
+          <p style="color: #948d9e; font-size: 11px; margin: 12px 0 0;">FRATE — Libro de Reclamaciones Virtual</p>
+        </div>
+      `
+
+      await transporter.sendMail({
+        from: `"FRATE - Libro de Reclamaciones" <${process.env.SMTP_USER}>`,
+        to: reclamo.correo_consumidor,
+        subject: `[FRATE] Respuesta a tu reclamo ${codigo}`,
+        html: htmlRespuesta,
+      })
+    }
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('Error al responder reclamo:', err)
+    res.status(500).json({ ok: false, error: 'Error interno.' })
+  }
+})
+
+// ── Libro de Reclamaciones: Listar (solo admin) ──
+app.get('/api/reclamaciones', requireAdmin, (req, res) => {
+  try {
+    const { estado, page = 1, limit = 50 } = req.query
+    let sql = 'SELECT * FROM reclamaciones WHERE 1=1'
+    const params = []
+
+    if (estado) {
+      sql += ' AND estado = ?'
+      params.push(estado)
+    }
+
+    const countSql = sql.replace('SELECT *', 'SELECT COUNT(*) as total')
+    const { total } = db.prepare(countSql).get(...params)
+
+    sql += ' ORDER BY creado_en DESC LIMIT ? OFFSET ?'
+    params.push(Number(limit), (Number(page) - 1) * Number(limit))
+
+    const reclamaciones = db.prepare(sql).all(...params)
+
+    res.json({ ok: true, reclamaciones, total })
+  } catch (err) {
+    console.error('Error al listar reclamaciones:', err)
+    res.status(500).json({ ok: false, error: 'Error interno.' })
+  }
+})
+
 // ── Admin: ver donaciones (con filtro de búsqueda por nombre/correo) ──
 app.get('/api/donaciones', requireAdmin, (req, res) => {
   try {
