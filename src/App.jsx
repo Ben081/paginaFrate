@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import Hero from './components/Hero'
 import Mision from './components/Mision'
@@ -14,6 +14,24 @@ import AvisoLibroReclamaciones from './components/AvisoLibroReclamaciones'
 import LibroReclamaciones from './components/LibroReclamaciones'
 import PoliticaPrivacidad from './components/PoliticaPrivacidad'
 import TerminosCondiciones from './components/TerminosCondiciones'
+
+function ScrollToHash() {
+  const location = useLocation()
+
+  useEffect(() => {
+    if (!location.hash) return
+
+    const id = location.hash.slice(1)
+    const timer = setTimeout(() => {
+      const el = document.getElementById(id)
+      if (el) el.scrollIntoView({ behavior: 'smooth' })
+    }, 50)
+
+    return () => clearTimeout(timer)
+  }, [location])
+
+  return null
+}
 
 function HomeContent() {
   const [contactoOpen, setContactoOpen] = useState(false)
@@ -36,11 +54,14 @@ function HomeContent() {
 }
 
 function LegalLayout({ children }) {
+  const [contactoOpen, setContactoOpen] = useState(false)
+
   return (
     <>
-      <Header />
+      <Header onContacto={() => setContactoOpen(true)} />
       {children}
       <Footer legal />
+      <ContactModal open={contactoOpen} onClose={() => setContactoOpen(false)} />
     </>
   )
 }
@@ -48,6 +69,7 @@ function LegalLayout({ children }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <ScrollToHash />
       <Routes>
         <Route path="/" element={<HomeContent />} />
         <Route path="/reclamaciones" element={<LegalLayout><LibroReclamaciones /></LegalLayout>} />
