@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 
 const NAV_LINKS = [
-  { href: '#mision', label: 'Proposito' },
-  { href: '#proyectos', label: 'Proyectos' },
-  { href: '#quienes-somos', label: 'Historia' },
-  { href: '#aliados', label: 'Aliados' },
+  { href: '/#mision', label: 'Proposito' },
+  { href: '/#proyectos', label: 'Proyectos' },
+  { href: '/#quienes-somos', label: 'Historia' },
+  { href: '/#aliados', label: 'Aliados' },
 ]
 
 export default function Header({ onContacto }) {
@@ -13,24 +14,24 @@ export default function Header({ onContacto }) {
   return (
     <header className="sticky top-0 z-50 bg-ink-deep/90 backdrop-blur-sm border-b border-line">
       <div className="wrap flex items-center justify-between gap-6 py-3.5">
-        <a href="#top" className="flex items-center shrink-0">
+        <Link to="/" className="flex items-center shrink-0">
           <img
             src="/FRATE4.svg"
             alt="FRATE"
             className="h-9 w-auto object-contain"
           />
-        </a>
+        </Link>
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-5 font-mono text-[12.5px] font-medium">
           {NAV_LINKS.map((link) => (
-            <a
+            <Link
               key={link.href}
-              href={link.href}
+              to={link.href}
               className="no-underline text-paper/75 transition-colors hover:text-gold-bright"
             >
               {link.label}
-            </a>
+            </Link>
           ))}
           <button
             onClick={onContacto}
@@ -57,14 +58,14 @@ export default function Header({ onContacto }) {
         <nav className="md:hidden border-t border-line bg-ink-deep/95 backdrop-blur-sm">
           <div className="wrap flex flex-col gap-1 py-3 font-mono text-[12.5px] font-medium">
             {NAV_LINKS.map((link) => (
-              <a
+              <Link
                 key={link.href}
-                href={link.href}
+                to={link.href}
                 onClick={() => setMenuOpen(false)}
                 className="no-underline text-paper/75 py-2.5 px-2 rounded-lg transition-colors hover:text-gold-bright hover:bg-white/[0.03]"
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
             <button
               onClick={() => { onContacto(); setMenuOpen(false) }}

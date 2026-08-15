@@ -121,6 +121,25 @@
     }
     .config-preview strong { color: #e0bc4a; }
 
+    /* Reclamaciones */
+    .badge-pendiente { background: rgba(255,193,7,0.15); color: #ffc107; }
+    .badge-respondido { background: rgba(76,175,80,0.15); color: #4caf50; }
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; padding: 20px;
+    }
+    .modal-content {
+      background: #18181b; border: 1px solid rgba(201,162,39,0.3);
+      border-radius: 16px; padding: 28px; max-width: 600px; width: 100%;
+      max-height: 80vh; overflow-y: auto;
+    }
+    .modal-content h3 { font-size: 18px; margin-bottom: 16px; color: #e0bc4a; }
+    .modal-field { margin-bottom: 12px; }
+    .modal-field .label { font-size: 11px; color: #948d9e; text-transform: uppercase; letter-spacing: 0.08em; }
+    .modal-field .value { font-size: 14px; color: #f3ead3; margin-top: 4px; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 20px; justify-content: flex-end; }
+
     /* Resumen */
     .resumen-filters {
       display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; align-items: flex-end;
@@ -151,6 +170,7 @@
     <button class="tab-btn active" data-tab="movimientos" onclick="cambiarTab('movimientos')">Movimientos</button>
     <button class="tab-btn" data-tab="resumen" onclick="cambiarTab('resumen')">Resumen</button>
     <button class="tab-btn" data-tab="configuracion" onclick="cambiarTab('configuracion')">Configuración</button>
+    <button class="tab-btn" data-tab="reclamaciones" onclick="cambiarTab('reclamaciones')">Reclamaciones</button>
   </div>
 
   <!-- ── TAB: MOVIMIENTOS ────────────────────────────────── -->
@@ -259,6 +279,41 @@
     </div>
   </div>
 
+  <!-- ── TAB: RECLAMACIONES ──────────────────────────────── -->
+  <div class="tab-panel" id="panel-reclamaciones">
+    <div class="filters">
+      <div class="filter-group">
+        <label>Estado</label>
+        <select id="filterEstado">
+          <option value="">Todos</option>
+          <option value="pendiente">Pendientes</option>
+          <option value="respondido">Respondidos</option>
+        </select>
+      </div>
+      <button onclick="cargarReclamaciones()">Filtrar</button>
+    </div>
+
+    <div class="summary" id="reclamacionesSummary"></div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Consumidor</th>
+          <th>Producto</th>
+          <th>Fecha</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tbodyReclamaciones"></tbody>
+    </table>
+
+    <div class="empty" id="emptyReclamaciones" style="display:none;">
+      No hay reclamos registrados.
+    </div>
+  </div>
+
   <script>
     const TOKEN = window.location.pathname.split('/').pop()
 
@@ -281,6 +336,7 @@
       document.getElementById(`panel-${tab}`).classList.add('active')
       if (tab === 'configuracion') cargarConfig()
       if (tab === 'resumen') cargarResumen()
+      if (tab === 'reclamaciones') cargarReclamaciones()
     }
 
     // ── Movimientos ───────────────────────────────────────
@@ -513,6 +569,154 @@
 
     cargarProyectos()
     cargar()
+
+    // ── Reclamaciones ──────────────────────────────────────
+    async function cargarReclamaciones() {
+      const estado = document.getElementById('filterEstado').value
+      const params = new URLSearchParams()
+      if (estado) params.set('estado', estado)
+
+      try {
+        const data = await api(`/reclamaciones?${params}`)
+        renderReclamaciones(data.reclamaciones, data.total)
+      } catch {
+        document.getElementById('emptyReclamaciones').style.display = 'block'
+        document.getElementById('emptyReclamaciones').textContent = 'Error de conexión.'
+      }
+    }
+
+    function renderReclamaciones(reclamaciones, total) {
+      const tbody = document.getElementById('tbodyReclamaciones')
+      const empty = document.getElementById('emptyReclamaciones')
+      const summary = document.getElementById('reclamacionesSummary')
+
+      const pendientes = reclamaciones.filter(r => r.estado === 'pendiente').length
+      const respondidos = reclamaciones.filter(r => r.estado === 'respondido').length
+      summary.innerHTML = `
+        <div class="summary-card">
+          <div class="label">Total</div>
+          <div class="value">${total}</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Pendientes</div>
+          <div class="value" style="color:#ffc107">${pendientes}</div>
+        </div>
+        <div class="summary-card">
+          <div class="label">Respondidos</div>
+          <div class="value" style="color:#4caf50">${respondidos}</div>
+        </div>
+      `
+
+      if (!reclamaciones || reclamaciones.length === 0) {
+        tbody.innerHTML = ''
+        empty.style.display = 'block'
+        empty.textContent = 'No hay reclamos registrados.'
+        return
+      }
+
+      empty.style.display = 'none'
+      tbody.innerHTML = reclamaciones.map(r => `
+        <tr>
+          <td><strong style="color:#e0bc4a">${r.codigo_unico}</strong></td>
+          <td>${r.nombre_consumidor}</td>
+          <td>${r.producto_servicio}</td>
+          <td>${new Date(r.creado_en + 'Z').toLocaleDateString('es-PE')}</td>
+          <td><span class="badge badge-${r.estado}">${r.estado}</span></td>
+          <td>
+            <button class="secondary" style="padding:4px 10px;font-size:11px"
+              onclick="verReclamo('${r.codigo_unico}')">Ver</button>
+          </td>
+        </tr>
+      `).join('')
+    }
+
+    async function verReclamo(codigo) {
+      try {
+        const data = await api(`/reclamaciones/${codigo}`)
+        const r = data.reclamo
+        const modal = document.getElementById('modalReclamo')
+        const content = document.getElementById('modalReclamoContent')
+
+        content.innerHTML = `
+          <h3>Reclamo ${r.codigo_unico}</h3>
+
+          <div class="modal-field">
+            <div class="label">Consumidor</div>
+            <div class="value">${r.nombre_consumidor}</div>
+          </div>
+          <div class="modal-field">
+            <div class="label">Producto/Servicio</div>
+            <div class="value">${r.producto_servicio}</div>
+          </div>
+          <div class="modal-field">
+            <div class="label">Fecha</div>
+            <div class="value">${new Date(r.creado_en + 'Z').toLocaleString('es-PE')}</div>
+          </div>
+          <div class="modal-field">
+            <div class="label">Estado</div>
+            <div class="value"><span class="badge badge-${r.estado}">${r.estado}</span></div>
+          </div>
+
+          ${r.acciones_proveedor ? `
+            <div class="modal-field" style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(201,162,39,0.15)">
+              <div class="label">Respuesta enviada</div>
+              <div class="value">${r.acciones_proveedor}</div>
+            </div>
+          ` : `
+            <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(201,162,39,0.15)">
+              <div class="modal-field">
+                <div class="label">Responder al reclamo</div>
+                <textarea id="respuestaReclamo" rows="4" placeholder="Escribe la respuesta o acciones adoptadas..."
+                  style="width:100%;background:#0f0f12;border:1px solid rgba(201,162,39,0.25);color:#f3ead3;padding:10px;border-radius:8px;font-size:13px;outline:none;resize:vertical;margin-top:6px"></textarea>
+              </div>
+              <div class="modal-actions">
+                <button class="secondary" onclick="cerrarModalReclamo()">Cancelar</button>
+                <button onclick="enviarRespuesta('${r.codigo_unico}')">Enviar respuesta</button>
+              </div>
+            </div>
+          `}
+        `
+
+        modal.style.display = 'flex'
+      } catch (err) {
+        alert('Error al cargar el reclamo: ' + err.message)
+      }
+    }
+
+    async function enviarRespuesta(codigo) {
+      const textarea = document.getElementById('respuestaReclamo')
+      const respuesta = textarea?.value?.trim()
+      if (!respuesta) {
+        alert('Escribe una respuesta antes de enviar.')
+        return
+      }
+
+      try {
+        await api(`/reclamaciones/${codigo}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            acciones_proveedor: respuesta,
+            estado: 'respondido'
+          })
+        })
+        alert('Respuesta enviada. Se notificará al consumidor por correo.')
+        cerrarModalReclamo()
+        cargarReclamaciones()
+      } catch (err) {
+        alert('Error al enviar respuesta: ' + err.message)
+      }
+    }
+
+    function cerrarModalReclamo(event) {
+      if (event && event.target !== event.currentTarget) return
+      document.getElementById('modalReclamo').style.display = 'none'
+    }
   </script>
+
+  <!-- Modal de detalle de reclamo -->
+  <div class="modal-overlay" id="modalReclamo" style="display:none;" onclick="cerrarModalReclamo(event)">
+    <div class="modal-content" id="modalReclamoContent"></div>
+  </div>
 </body>
 </html>
