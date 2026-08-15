@@ -28,7 +28,7 @@ export default function AvisoLibroReclamaciones() {
             </svg>
           </div>
           <p className="text-[12px] text-paper/70 leading-[1.4] min-w-0">
-            Conforme al Código de Protección y Defensa del Consumidor, este establecimiento cuenta con un{' '}
+            Conforme a Código de Protección y Defensa del Consumidor, este establecimiento cuenta con un{' '}
             <a
               href="/reclamaciones"
               className="text-gold-bright font-semibold no-underline hover:underline"
