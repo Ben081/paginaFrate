@@ -100,9 +100,6 @@ export default function Footer({ legal = false }) {
                 info@frate.lat
               </a>
               <span className="text-[12.5px] text-paper/60">
-                998007262
-              </span>
-              <span className="text-[12.5px] text-paper/60">
                 Huánuco, Perú
               </span>
             </div>
