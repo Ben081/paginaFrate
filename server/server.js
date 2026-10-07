@@ -49,12 +49,30 @@ function calcularComision(monto) {
   return { comision: comisionCulqi, comisionFrate, montoNeto, feeFijo }
 }
 
-// ── Culqui: Configuración (COMENTADO - activar cuando se tengan los tokens) ──
-// import Culqi from '@culqi/culqi-js'
-// const culqi = new Culqi({
-//   public_key: process.env.CULQI_PUBLIC_KEY,
-//   secret_key: process.env.CULQI_SECRET_KEY,
-// })
+// ── Culqi: configuración ─────────────────────────────────────
+// CULQI_ENABLED se activa solo cuando hay una llave secreta en el .env.
+// Mientras no exista, el sistema sigue funcionando en modo "simulado"
+// para no romper nada en desarrollo/pruebas.
+const CULQI_SECRET_KEY = process.env.CULQI_SECRET_KEY
+const CULQI_ENABLED = Boolean(CULQI_SECRET_KEY)
+const CULQI_API = 'https://api.culqi.com/v2'
+
+if (!CULQI_ENABLED) {
+  console.warn('[frate-api] CULQI_SECRET_KEY no configurada: las donaciones se registrarán en modo SIMULADO.')
+}
+
+async function culqiFetch(path, options = {}) {
+  const res = await fetch(`${CULQI_API}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${CULQI_SECRET_KEY}`,
+      ...(options.headers || {}),
+    },
+  })
+  const data = await res.json().catch(() => ({}))
+  return { status: res.status, data }
+}
 
 // ── Configuración de proyectos (nombre, asunto, footer para correos) ──
 // El "asunto" incluye siempre el nombre del proyecto, para identificar
@@ -114,6 +132,8 @@ app.get('/api/config', (_req, res) => {
       fee_fijo: Number(config.fee_fijo),
       monto_minimo: Number(config.monto_minimo),
       comision_frate_pct: Number(config.comision_frate_pct),
+      culqi_public_key: process.env.CULQI_PUBLIC_KEY || null,
+      culqi_enabled: CULQI_ENABLED,
     })
   } catch (err) {
     console.error('Error al leer configuración:', err)
@@ -174,10 +194,17 @@ app.put('/api/config', requireAdmin, (req, res) => {
   }
 })
 
-// ── Ruta: Registrar donación ───────────────────────────────
+// ── Ruta: Registrar donación con TARJETA o YAPE (vía token) ──────
+// El frontend debe tokenizar primero con Culqi Checkout y mandar
+// el token.id en "token_pago". metodo_pago sirve solo para
+// guardar con qué método se pagó (no cambia el flujo).
 app.post('/api/donaciones', async (req, res) => {
   try {
-    const { proyecto, nombre, correo, monto, anonimo = false, fuente = 'desconocida', token_pago } = req.body
+    const {
+      proyecto, nombre, correo, monto,
+      anonimo = false, fuente = 'desconocida',
+      token_pago, metodo_pago = 'tarjeta',
+    } = req.body
 
     if (!proyecto || !monto || Number(monto) <= 0) {
       return res.status(400).json({ ok: false, error: 'Datos incompletos o monto inválido.' })
@@ -195,35 +222,53 @@ app.post('/api/donaciones', async (req, res) => {
 
     const { comision, comisionFrate, montoNeto, feeFijo } = calcularComision(montoNum)
 
-    // ── Culqui: Validar pago (COMENTADO - activar cuando se tengan los tokens) ──
-    // let estadoPago = 'simulado'
-    // let pagoId = null
-    //
-    // if (token_pago) {
-    //   try {
-    //     const cargo = await culqi.charges.create({
-    //       amount: Math.round(montoNum * 100), // Culqui usa céntimos
-    //       currency_code: 'PEN',
-    //       email: correo || 'donante@ejemplo.com',
-    //       source_id: token_pago,
-    //       description: `Donación ${proyecto}`,
-    //       metadata: { proyecto, fuente }
-    //     })
-    //     estadoPago = 'completado'
-    //     pagoId = cargo.id
-    //   } catch (error) {
-    //     console.error('Error en pago Culqui:', error)
-    //     estadoPago = 'fallido'
-    //   }
-    // }
+    let estadoPago
+    let pagoId = null
+    let requiere3ds = false
+    let culqi3dsData = null
 
-    // Por ahora, registrar como completado (simulado)
-    const estadoPago = 'completado'
-    const pagoId = null
+    if (CULQI_ENABLED) {
+      if (!token_pago) {
+        return res.status(400).json({ ok: false, error: 'Falta el token de pago (token_pago).' })
+      }
+
+      const { status, data } = await culqiFetch('/charges', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: Math.round(montoNum * 100), // Culqi usa céntimos
+          currency_code: 'PEN',
+          email: correo || 'donante@frate.lat',
+          source_id: token_pago,
+          description: `Donación ${proyecto}`,
+          metadata: { proyecto, fuente },
+        }),
+      })
+
+      if (status === 201) {
+        // Cargo aprobado directamente
+        estadoPago = 'completado'
+        pagoId = data.id
+      } else if (status === 200) {
+        // El motor antifraude pide autenticación 3DS antes de confirmar
+        estadoPago = 'pendiente_3ds'
+        requiere3ds = true
+        culqi3dsData = data
+      } else {
+        console.error('Cargo Culqi rechazado:', data)
+        return res.status(402).json({
+          ok: false,
+          error: data?.user_message || 'El pago fue rechazado por el banco.',
+        })
+      }
+    } else {
+      // Culqi aún no configurado (sin CULQI_SECRET_KEY): modo simulado.
+      // Esto permite seguir probando el sitio sin cobrar de verdad.
+      estadoPago = 'simulado'
+    }
 
     const stmt = db.prepare(`
-      INSERT INTO donaciones (proyecto, nombre, correo, monto, comision, comision_frate, monto_neto, fee, anonimo, fuente, estado_pago, pago_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO donaciones (proyecto, nombre, correo, monto, comision, comision_frate, monto_neto, fee, anonimo, fuente, estado_pago, pago_id, metodo_pago)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     const result = stmt.run(
@@ -238,13 +283,174 @@ app.post('/api/donaciones', async (req, res) => {
       anonimo ? 1 : 0,
       fuente,
       estadoPago,
-      pagoId
+      pagoId,
+      metodo_pago
     )
 
-    res.json({ ok: true, id: result.lastInsertRowid, estado_pago: estadoPago })
+    res.json({
+      ok: true,
+      id: result.lastInsertRowid,
+      estado_pago: estadoPago,
+      requiere_3ds: requiere3ds,
+      // El frontend usa esto para llamar a Culqi3DS.initAuthentication()
+      culqi_3ds: requiere3ds ? culqi3dsData : undefined,
+    })
   } catch (err) {
     console.error('Error al registrar donación:', err)
     res.status(500).json({ ok: false, error: 'Error interno del servidor.' })
+  }
+})
+
+// ── Ruta: Confirmar donación tras pasar la autenticación 3DS ─────
+// El frontend llama aquí después de que el donante ingresó el código
+// que le mandó el banco, con los parámetros que entrega Culqi3DS.
+app.post('/api/donaciones/:id/confirmar-3ds', async (req, res) => {
+  if (!CULQI_ENABLED) {
+    return res.status(503).json({ ok: false, error: 'Culqi no está configurado todavía.' })
+  }
+  try {
+    const { id } = req.params
+    const { token_pago, authentication_3DS, device_finger_print_id } = req.body
+
+    const donacion = db.prepare('SELECT * FROM donaciones WHERE id = ?').get(id)
+    if (!donacion) {
+      return res.status(404).json({ ok: false, error: 'Donación no encontrada.' })
+    }
+    if (!token_pago || !authentication_3DS) {
+      return res.status(400).json({ ok: false, error: 'Faltan los parámetros de autenticación 3DS.' })
+    }
+
+    const { status, data } = await culqiFetch('/charges', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount: Math.round(donacion.monto * 100),
+        currency_code: 'PEN',
+        email: donacion.correo || 'donante@frate.lat',
+        source_id: token_pago,
+        description: `Donación ${donacion.proyecto}`,
+        antifraud_details: { device_finger_print_id },
+        authentication_3DS,
+      }),
+    })
+
+    const estadoFinal = status === 201 ? 'completado' : 'fallido'
+    db.prepare('UPDATE donaciones SET estado_pago = ?, pago_id = ? WHERE id = ?')
+      .run(estadoFinal, data.id || donacion.pago_id, id)
+
+    if (status === 201) {
+      res.json({ ok: true, estado_pago: estadoFinal })
+    } else {
+      console.error('Cargo rechazado tras 3DS:', data)
+      res.status(402).json({ ok: false, error: data?.user_message || 'El pago no pudo confirmarse.' })
+    }
+  } catch (err) {
+    console.error('Error al confirmar 3DS:', err)
+    res.status(500).json({ ok: false, error: 'Error interno del servidor.' })
+  }
+})
+
+// ── Ruta: Crear ORDEN para pagos con billeteras móviles (Yape QR/Plin), ──
+// ── PagoEfectivo o Cuotéalo ───────────────────────────────────────────
+// El order_id resultante se le pasa al Culqi Checkout (Culqi.settings({ order })).
+// El pago se confirma de forma asíncrona vía webhook, NO en esta misma petición.
+app.post('/api/donaciones/orden', async (req, res) => {
+  if (!CULQI_ENABLED) {
+    return res.status(503).json({ ok: false, error: 'Los pagos con billeteras móviles aún no están activos.' })
+  }
+  try {
+    const { proyecto, nombre, correo, monto, anonimo = false, fuente = 'desconocida' } = req.body
+
+    if (!proyecto || !monto || Number(monto) <= 0) {
+      return res.status(400).json({ ok: false, error: 'Datos incompletos o monto inválido.' })
+    }
+
+    const montoNum = Number(monto)
+    const montoMinimo = Number(getAllConfig().monto_minimo) || 0
+    if (montoNum < montoMinimo) {
+      return res.status(400).json({
+        ok: false,
+        error: `El monto mínimo de donación es S/ ${montoMinimo.toFixed(2)}.`,
+      })
+    }
+
+    const orderNumber = `DON-${proyecto}-${Date.now()}`
+
+    const { status, data } = await culqiFetch('/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount: Math.round(montoNum * 100),
+        currency_code: 'PEN',
+        description: `Donación ${proyecto}`,
+        order_number: orderNumber,
+        client_details: {
+          first_name: anonimo ? 'Donante' : (nombre || 'Donante'),
+          last_name: 'Frate',
+          email: correo || 'donante@frate.lat',
+          phone_number: '999999999',
+        },
+        expiration_date: Math.floor(Date.now() / 1000) + 60 * 60 * 2, // vence en 2 horas
+        confirm: false,
+      }),
+    })
+
+    if (status >= 400) {
+      console.error('Error al crear orden Culqi:', data)
+      return res.status(502).json({ ok: false, error: 'No se pudo generar la orden de pago.' })
+    }
+
+    const { comision, comisionFrate, montoNeto, feeFijo } = calcularComision(montoNum)
+
+    const stmt = db.prepare(`
+      INSERT INTO donaciones (proyecto, nombre, correo, monto, comision, comision_frate, monto_neto, fee, anonimo, fuente, estado_pago, pago_id, metodo_pago)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?, 'billetera')
+    `)
+    const result = stmt.run(
+      proyecto,
+      anonimo ? 'Donante anónimo' : (nombre || 'Donante anónimo'),
+      correo || null,
+      montoNum, comision, comisionFrate, montoNeto, feeFijo,
+      anonimo ? 1 : 0, fuente,
+      data.id
+    )
+
+    res.json({ ok: true, donacion_id: result.lastInsertRowid, order_id: data.id, order_number: data.order_number })
+  } catch (err) {
+    console.error('Error al crear orden de donación:', err)
+    res.status(500).json({ ok: false, error: 'Error interno del servidor.' })
+  }
+})
+
+// ── Webhook de Culqi: confirma pagos asíncronos (billeteras, PagoEfectivo, Cuotéalo) ──
+// IMPORTANTE: Culqi no firma sus webhooks con una clave verificable.
+// Por eso, NUNCA confiamos en el contenido que llega aquí: siempre volvemos
+// a consultar el estado real de la orden en la API de Culqi antes de actualizar
+// la base de datos. Esto requiere que esta URL sea pública y HTTPS.
+app.post('/api/webhooks/culqi', async (req, res) => {
+  // Respondemos rápido para que Culqi no reintente de más.
+  res.status(200).json({ ok: true })
+
+  if (!CULQI_ENABLED) return
+
+  try {
+    const event = req.body
+    if (!event?.data?.id) return
+
+    if (event.type === 'order.status.changed') {
+      const orderId = event.data.id
+      const { status, data: order } = await culqiFetch(`/orders/${orderId}`)
+      if (status !== 200) return
+
+      const donacion = db.prepare('SELECT id FROM donaciones WHERE pago_id = ?').get(orderId)
+      if (!donacion) return
+
+      let nuevoEstado = 'pendiente'
+      if (order.state === 'paid') nuevoEstado = 'completado'
+      else if (order.state === 'expired' || order.state === 'rejected') nuevoEstado = 'fallido'
+
+      db.prepare('UPDATE donaciones SET estado_pago = ? WHERE id = ?').run(nuevoEstado, donacion.id)
+    }
+  } catch (err) {
+    console.error('Error al procesar webhook de Culqi:', err)
   }
 })
 
@@ -721,9 +927,9 @@ app.get('/api/donaciones/csv', requireAdmin, (req, res) => {
     sql += ' ORDER BY creado_en DESC'
     const donaciones = db.prepare(sql).all(...params)
 
-    const header = 'ID,Proyecto,Nombre,Correo,Monto,Comisión Culqi,Comisión Frate,Monto Neto,Fee,Anónimo,Fuente,Estado,Fecha'
+    const header = 'ID,Proyecto,Nombre,Correo,Monto,Comisión Culqi,Comisión Frate,Monto Neto,Fee,Anónimo,Fuente,Estado,Método,Fecha'
     const rows = donaciones.map(d =>
-      [d.id, d.proyecto, `"${d.nombre}"`, d.correo || '', d.monto, d.comision, d.comision_frate, d.monto_neto, d.fee, d.anonimo ? 'Sí' : 'No', d.fuente, d.estado_pago, d.creado_en].join(',')
+      [d.id, d.proyecto, `"${d.nombre}"`, d.correo || '', d.monto, d.comision, d.comision_frate, d.monto_neto, d.fee, d.anonimo ? 'Sí' : 'No', d.fuente, d.estado_pago, d.metodo_pago || '', d.creado_en].join(',')
     )
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8')
@@ -755,7 +961,7 @@ app.get('/admin/donaciones/:token', (req, res) => {
 
 // ── Health check ───────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, timestamp: new Date().toISOString() })
+  res.json({ ok: true, timestamp: new Date().toISOString(), culqi_enabled: CULQI_ENABLED })
 })
 
 // ── Start ──────────────────────────────────────────────────

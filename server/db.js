@@ -75,6 +75,15 @@ try {
   // La columna ya existe, no hacer nada
 }
 
+// ── Migración: columna metodo_pago (tarjeta / yape / billetera / simulado) ──
+// Necesaria para la integración real de Culqi: permite saber con qué medio
+// se pagó cada donación y distinguir el flujo de token vs el flujo de orden.
+try {
+  db.exec(`ALTER TABLE donaciones ADD COLUMN metodo_pago TEXT NOT NULL DEFAULT 'tarjeta'`)
+} catch (e) {
+  // La columna ya existe, no hacer nada
+}
+
 // ── Valores por defecto (solo se insertan si no existen) ──
 const defaults = {
   comision_pct: '5',         // % de comisión sobre el monto donado (proveedor de pagos)
