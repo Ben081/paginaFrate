@@ -850,8 +850,9 @@ app.get('/api/reclamaciones', requireAdmin, (req, res) => {
 // ── Admin: ver donaciones (con filtro de búsqueda por nombre/correo) ──
 app.get('/api/donaciones', requireAdmin, (req, res) => {
   try {
-    const { proyecto, desde, hasta, busqueda, page = 1, limit = 50 } = req.query
-    let sql = 'SELECT * FROM donaciones WHERE 1=1'
+    const { proyecto, desde, hasta, busqueda, estado, page = 1, limit = 50 } = req.query
+    const filtroEstado = estado === 'todos' ? '' : " AND estado_pago IN ('completado','simulado')"
+    let sql = 'SELECT * FROM donaciones WHERE 1=1' + filtroEstado
     const params = []
 
     if (proyecto) {
@@ -892,6 +893,7 @@ app.get('/api/donaciones', requireAdmin, (req, res) => {
       FROM donaciones WHERE 1=1
     `
     const resumenParams = []
+    resumenSql += filtroEstado
     if (desde) { resumenSql += ' AND creado_en >= ?'; resumenParams.push(desde) }
     if (hasta) { resumenSql += ' AND creado_en <= ?'; resumenParams.push(hasta + ' 23:59:59') }
     if (busqueda) {
@@ -912,8 +914,9 @@ app.get('/api/donaciones', requireAdmin, (req, res) => {
 // ── Admin: exportar CSV ────────────────────────────────────
 app.get('/api/donaciones/csv', requireAdmin, (req, res) => {
   try {
-    const { proyecto, desde, hasta, busqueda } = req.query
-    let sql = 'SELECT * FROM donaciones WHERE 1=1'
+    const { proyecto, desde, hasta, busqueda, estado } = req.query
+    const filtroEstado = estado === 'todos' ? '' : " AND estado_pago IN ('completado','simulado')"
+    let sql = 'SELECT * FROM donaciones WHERE 1=1' + filtroEstado
     const params = []
 
     if (proyecto) { sql += ' AND proyecto = ?'; params.push(proyecto) }
