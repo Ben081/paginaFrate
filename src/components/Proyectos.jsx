@@ -8,16 +8,16 @@ const TABS = [
 ]
 
 const TAG_STYLES = {
-  cajon: {
-    top: 'bg-gradient-to-br from-[#3B2415] to-[#4a301c]',
-    escudo: 'bg-[#3B2415] text-[#D98A54] border border-[#D98A5455]',
-    link: 'text-[#E8A33D]',
-  },
   /* puente: {
     top: 'bg-gradient-to-br from-[#1B1730] to-[#241f3d]',
     escudo: 'bg-[#1B1730] text-[#E0BC4A] border border-[#E0BC4A55]',
     link: 'text-[#D6336C]',
   }, */
+  cajon: {
+    top: 'bg-gradient-to-br from-[#3B2415] to-[#4a301c]',
+    escudo: 'bg-[#3B2415] text-[#D98A54] border border-[#D98A5455]',
+    link: 'text-[#E8A33D]',
+  },
   /* catequistas: {
     top: 'bg-gradient-to-br from-[#20221f] to-[#2a2d29]',
     escudo: 'bg-[#20221f] text-[#8fb8b5] border border-dashed border-[#8fb8b555]',

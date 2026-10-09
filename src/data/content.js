@@ -8,7 +8,7 @@ export const stats = [
 ]
 
 export const proyectos = [
-  {
+  /* {
     id: 'puente',
     tag: 'puente',
     escudo: 'PC',
@@ -18,8 +18,8 @@ export const proyectos = [
     achievements: ['15 pistas musicales', '30 niños beneficiarios', '15 estudiantes voluntarios'],
     link: 'https://calicanto.frate.lat',
     soon: false,
-  },
-  /* {
+  }, */
+  {
     id: 'cajon',
     tag: 'cajon',
     escudo: 'CP',
@@ -30,7 +30,7 @@ export const proyectos = [
     link: 'https://cajonperuano.frate.lat',
     soon: false,
   },
-  {
+  /* {
     id: 'catequistas',
     tag: 'catequistas',
     escudo: 'FC',
