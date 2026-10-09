@@ -19,7 +19,7 @@ export const proyectos = [
     link: 'https://calicanto.frate.lat',
     soon: false,
   },
-  {
+  /* {
     id: 'cajon',
     tag: 'cajon',
     escudo: 'CP',
@@ -40,7 +40,7 @@ export const proyectos = [
     achievements: [],
     link: 'https://formacioncatequistas.frate.lat',
     soon: true,
-  },
+  }, */
 ]
 
 export const equipo = [
